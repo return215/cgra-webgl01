@@ -1,7 +1,7 @@
 import vertProgram from "./main.vert";
 import fragProgram from "./main.frag";
 import * as twgl from "twgl.js";
-import { scaleToBottomLeft } from "./utils";
+import { scaleToBottomLeft, showDecimalPoints } from "./utils";
 
 type ShaderType = WebGLRenderingContext["VERTEX_SHADER"] | WebGLRenderingContext["FRAGMENT_SHADER"];
 
@@ -49,6 +49,7 @@ function createProgram(gl: WebGLRenderingContext, vertShader: WebGLShader, fragS
 
 function main(): void {
   // --- PREPARE --- //
+  //#region
 
   const canvas = document.querySelector<HTMLCanvasElement>("#canvas");
   if (!canvas) {
@@ -58,6 +59,8 @@ function main(): void {
       `);
     return;
   }
+
+  const timeScaleElem = document.querySelector<HTMLParagraphElement>("#timeScale");
 
   const gl = canvas.getContext("webgl");
   if (!gl) {
@@ -80,13 +83,11 @@ function main(): void {
     return;
   }
   gl.useProgram(program);
+  //#endregion
 
-  // --- THE REAL WORK --- //
-
+  // --- THE DATA --- //
+  //#region
   // position
-
-  const posBuffer = gl.createBuffer()!!;
-
   const pos = new Float32Array([
     4 / 8, 4 / 8,
     1 / 8, 4 / 8,
@@ -101,70 +102,128 @@ function main(): void {
     4 / 8, 1 / 8,
   ]).map(scaleToBottomLeft);
 
-
   // color
-
-  const colBuffer = gl.createBuffer()!!;
-
   const stellaColors = [
     196, 92, 255, 255,
     115, 92, 255, 255,
     92, 151, 255, 255,
   ];
-
   const revalxColors = [
     247, 135, 2, 255,
     236, 247, 2, 255,
     247, 13, 2, 255,
   ];
-
   const neoColors = [
     36, 247, 150, 255,
     36, 238, 247, 255,
     36, 133, 247, 255,
   ];
-
-  const colors = new Uint8Array( (stellaColors)
-                          .concat(revalxColors)
-                          .concat(neoColors)
-                 );
+  const allColors = [stellaColors, revalxColors, neoColors];
+  //#endregion
 
   // --- RENDERING --- //
 
   // prepare for rendering
-
-  const resized = twgl.resizeCanvasToDisplaySize(canvas as HTMLCanvasElement, window.devicePixelRatio);
+  const resized = twgl.resizeCanvasToDisplaySize(canvas, window.devicePixelRatio);
   console.log(`Canvas ${resized ? 'was' : 'already'} resized to ${canvas.width}x${canvas.height}.`);
   gl.viewport(0, 0, canvas.width, canvas.height);
 
   // render loop
-
-
   function render(gl: WebGLRenderingContext, program: WebGLProgram) {
-    let time : number = 0;
+    let startTime: number | null = null;
+    let previousTime: number;
+    let elapsedTime: number = 0;
+    let timeScale = 1.0;
+    let shrinkTimeScale = true;
+    const posBuffer = gl.createBuffer()!!;
+    const colBuffer = gl.createBuffer()!!;
+    const colNextBuffer = gl.createBuffer()!!;
 
-    return function() {
-      gl.clearColor(1, 1, 1, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    return function doRender() {
+      // initialize time if haven't
+      if (!startTime) {
+        previousTime = startTime = performance.now();
+      }
+
+      // set time
+      {
+        const currentTime = performance.now();
+        elapsedTime += ((currentTime - previousTime) / 1000.0) * timeScale; // Convert to seconds
+        previousTime = currentTime;
+        if (timeScaleElem)
+          timeScaleElem.textContent = `
+            Time scale = ${showDecimalPoints(timeScale)} |
+            Current time = ${showDecimalPoints((currentTime - startTime) / 1000.0)}
+          `;
+
+        // scale time
+        if (timeScale < 2 / 10 || timeScale > 10 / 2)
+          shrinkTimeScale = !shrinkTimeScale;
+
+        if (shrinkTimeScale)
+          timeScale *= 99 / 100;
+        else
+          timeScale *= 100 / 99;
+
+        const unifTime = gl.getUniformLocation(program, "u_Time");
+        gl.uniform1f(unifTime, elapsedTime);
+      }
+
       // set positions
-      const attrPosPtr = gl.getAttribLocation(program, "a_Pos");
-      gl.enableVertexAttribArray(attrPosPtr);
-      gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
-      gl.vertexAttribPointer(attrPosPtr, 2, gl.FLOAT, false, 0, 0);
+      {
+        const attrPos = gl.getAttribLocation(program, "a_Pos");
+        gl.enableVertexAttribArray(attrPos);
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(attrPos, 2, gl.FLOAT, false, 0, 0);
+      }
 
       // set colors
-      const attrColPtr = gl.getAttribLocation(program, "a_Col");
-      gl.enableVertexAttribArray(attrColPtr);
-      gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
-      gl.vertexAttribPointer(attrColPtr, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+      /* 
+      tri0 : 0 -> 1 -> 2 -> 0
+      tri1 : 1 -> 2 -> 0 -> 1
+      tri2 : 2 -> 0 -> 1 -> 2
+      */
+      {
+        const attrCol = gl.getAttribLocation(program, "a_Col");
+        gl.enableVertexAttribArray(attrCol);
+        gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
+        const colors = new Uint8Array([
+          allColors[Math.floor(elapsedTime + 0) % 3],
+          allColors[Math.floor(elapsedTime + 1) % 3],
+          allColors[Math.floor(elapsedTime + 2) % 3],
+        ].flat());
+        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(attrCol, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+      }
 
-      gl.drawArrays(gl.TRIANGLES, 0, pos.length / 2);
+      // set next colors
+      {
+        const attrColNext = gl.getAttribLocation(program, "a_ColNext");
+        gl.enableVertexAttribArray(attrColNext);
+        gl.bindBuffer(gl.ARRAY_BUFFER, colNextBuffer);
+        const colors = new Uint8Array([
+          allColors[Math.floor(elapsedTime + 1) % 3],
+          allColors[Math.floor(elapsedTime + 2) % 3],
+          allColors[Math.floor(elapsedTime + 0) % 3],
+        ].flat());
+        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(attrColNext, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+      }
+
+      // do drawing
+      {
+        gl.clearColor(1, 1, 1, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, pos.length / 2);
+      }
+
+      // recursively do render
+      requestAnimationFrame(doRender)
     }
   }
-  
-  requestAnimationFrame(render(gl, program));
+
+  render(gl, program)();
 
   console.log('done');
 

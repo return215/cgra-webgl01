@@ -20,7 +20,7 @@ canvas {
   border-color: #888;
   min-width: 320px;
   min-height: 180px;
-  width: 100vw;
+  width: 95vw;
 }
 
 a {
@@ -35,7 +35,9 @@ a:hover {
 body {
   margin: 0;
   display: flex;
-  place-items: center;
+  align-items: center;
+  justify-items: center;
+  flex-direction: column;
   min-width: 320px;
   min-height: 100vh;
 }

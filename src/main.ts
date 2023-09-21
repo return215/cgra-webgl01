@@ -193,7 +193,7 @@ function main(): void {
           allColors[Math.floor(elapsedTime + 1) % 3],
           allColors[Math.floor(elapsedTime + 2) % 3],
         ].flat());
-        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
         gl.vertexAttribPointer(attrCol, 4, gl.UNSIGNED_BYTE, true, 0, 0);
       }
 
@@ -207,16 +207,14 @@ function main(): void {
           allColors[Math.floor(elapsedTime + 2) % 3],
           allColors[Math.floor(elapsedTime + 0) % 3],
         ].flat());
-        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
         gl.vertexAttribPointer(attrColNext, 4, gl.UNSIGNED_BYTE, true, 0, 0);
       }
 
       // do drawing
-      {
-        gl.clearColor(1, 1, 1, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLES, 0, pos.length / 2);
-      }
+      gl.clearColor(1, 1, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, pos.length / 2);
 
       // recursively do render
       requestAnimationFrame(doRender)
